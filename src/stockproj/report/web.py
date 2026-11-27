@@ -26,7 +26,10 @@ def main() -> None:
     st.set_page_config(page_title="종목 추천", layout="wide")
     db = _db()
     scores = db.latest_scores()
-    st.title("종목 추천")
+    title, refresh = st.columns([6, 1], vertical_alignment="bottom")
+    title.title("종목 추천")
+    if refresh.button("새로고침", width="stretch"):
+        st.rerun()
     if scores.empty:
         st.info("아직 점수가 없습니다. `stockproj score` 를 먼저 실행하세요.")
         return

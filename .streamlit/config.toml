@@ -1,0 +1,3 @@
+# 저장소 폴더에서 `streamlit run` 으로 직접 띄울 때도 맨 위 영어 메뉴(Deploy, ⋮)를 숨긴다.
+[client]
+toolbarMode = "minimal"
