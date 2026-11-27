@@ -100,9 +100,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "web":
         app = Path(__file__).parent / "report" / "web.py"
         # headless: 첫 실행 때 이메일을 묻는 질문을 건너뛴다
-        return subprocess.call(
-            [sys.executable, "-m", "streamlit", "run", str(app), "--server.headless", "true"]
-        )
+        # toolbarMode=minimal: 맨 위 영어 메뉴(Deploy, ⋮)를 숨긴다. 새로고침은 화면의 한글 버튼으로 한다.
+        cmd = [sys.executable, "-m", "streamlit", "run", str(app)]
+        cmd += ["--server.headless", "true", "--client.toolbarMode", "minimal"]
+        return subprocess.call(cmd)
     if args.command == "kakao-login":
         _kakao_login(settings)
         return 0
@@ -154,8 +155,14 @@ def _print_top(db: Database, markets: list[str], preset: str, n: int) -> None:
             print(f"[{m}] 점수가 없습니다. `stockproj score` 를 먼저 실행하세요.")
             continue
         print(f"[{m} · {preset} · 기준일 {part['as_of'].iloc[0]:%Y-%m-%d}]")
-        cols = ["rank", "symbol", "name", "score", "grade", "fundamental", "technical", "reasons"]
-        print(part[cols].round(1).to_string(index=False))
+        from stockproj.report import fmt
+
+        out = part[
+            ["rank", "symbol", "name", "score", "grade", "fundamental", "technical", "close", "reasons"]
+        ]
+        out = out.round(1).assign(close=part["close"].map(fmt.price_formatter(m)))
+        out = out.rename(columns={"close": f"close({fmt.CURRENCY[m]})"})
+        print(out.to_string(index=False))
 
 
 if __name__ == "__main__":
