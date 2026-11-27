@@ -154,8 +154,14 @@ def _print_top(db: Database, markets: list[str], preset: str, n: int) -> None:
             print(f"[{m}] 점수가 없습니다. `stockproj score` 를 먼저 실행하세요.")
             continue
         print(f"[{m} · {preset} · 기준일 {part['as_of'].iloc[0]:%Y-%m-%d}]")
-        cols = ["rank", "symbol", "name", "score", "grade", "fundamental", "technical", "reasons"]
-        print(part[cols].round(1).to_string(index=False))
+        from stockproj.report import fmt
+
+        out = part[
+            ["rank", "symbol", "name", "score", "grade", "fundamental", "technical", "close", "reasons"]
+        ]
+        out = out.round(1).assign(close=part["close"].map(fmt.price_formatter(m)))
+        out = out.rename(columns={"close": f"close({fmt.CURRENCY[m]})"})
+        print(out.to_string(index=False))
 
 
 if __name__ == "__main__":

@@ -11,6 +11,7 @@ import streamlit as st
 
 from stockproj.analysis.scoring import PRESETS
 from stockproj.config import load_settings
+from stockproj.report import fmt
 from stockproj.storage import Database
 
 MARKETS = {"KR": "국내", "US": "미국"}
@@ -56,11 +57,21 @@ def main() -> None:
             "grade": "등급",
             "fundamental": "재무",
             "technical": "차트",
-            "close": "종가",
+            "close": f"종가({fmt.CURRENCY[market]})",
             "reasons": "근거",
         }
     )
-    st.dataframe(table.round(1), hide_index=True, width="stretch", height=480)
+    # 숫자 열은 정렬되도록 숫자로 두고 표시만 바꾼다
+    styled = table.style.format(
+        {
+            "점수": "{:.1f}",
+            "재무": "{:.1f}",
+            "차트": "{:.1f}",
+            f"종가({fmt.CURRENCY[market]})": fmt.price_formatter(market),
+        },
+        na_rep="-",
+    )
+    st.dataframe(styled, hide_index=True, width="stretch", height=480)
 
     if view.empty:
         return
@@ -71,9 +82,14 @@ def main() -> None:
     )
     prices = db.prices(market, symbol)
     if not prices.empty:
-        st.line_chart(prices.set_index("date")["close"].tail(250), height=260)
+        st.line_chart(
+            prices.set_index("date")["close"].tail(250), height=260, y_label=f"종가({fmt.CURRENCY[market]})"
+        )
     row = view.set_index("symbol").loc[symbol]
-    st.write(f"**{row['grade']}** · 점수 {row['score']:.1f} · {row['reasons'] or '근거 없음'}")
+    st.write(
+        f"**{row['grade']}** · 점수 {row['score']:.1f} · 종가 {fmt.price(row['close'], market)}"
+        f"{fmt.CURRENCY[market]} · {row['reasons'] or '근거 없음'}"
+    )
     st.caption("투자 참고용 정보이며, 투자 판단과 책임은 본인에게 있습니다.")
 
 
