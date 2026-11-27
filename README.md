@@ -17,7 +17,7 @@
 
 ## 설치
 
-Python 3.11 이상이 필요합니다.
+Python 3.11~3.14 를 지원합니다. 3.15 에서는 pykrx 가 pandas 3 미만을 요구해서 설치되지 않습니다.
 
 ```bash
 python -m venv .venv
@@ -26,10 +26,11 @@ pip install -e ".[backfill,dev]"
 cp .env.example .env               # 그리고 .env 에 API 키를 채운다
 ```
 
-## API 키 준비 (모두 무료)
+## API 키와 계정 준비 (모두 무료)
 
 | 이름 | 발급처 | 용도 |
 | --- | --- | --- |
+| `KRX_ID`, `KRX_PW` | [KRX 정보데이터시스템](https://data.krx.co.kr) 회원가입 아이디·비밀번호 (필수) | 국내 종목 목록·일봉 (pykrx 가 로그인에 사용) |
 | `DART_API_KEY` | [OpenDART](https://opendart.fss.or.kr) 회원가입 후 인증키 신청 | 국내 재무제표 |
 | `SEC_USER_AGENT` | 키 없음. `앱이름 본인이메일` 형식으로 적기 | 미국 재무제표 (SEC 요구 사항) |
 | `TOSS_CLIENT_ID`, `TOSS_CLIENT_SECRET` | 토스증권 WTS > 설정 > Open API, 허용 IP 등록 필요 | 1단계부터 시세, 4단계에서 주문 |
@@ -82,6 +83,7 @@ tests/                 인터넷 없이 도는 단위 테스트
 
 - pykrx·yfinance 는 비공식 라이브러리라 사이트가 바뀌면 깨질 수 있습니다. 1단계에서 일일 갱신을 토스증권 API 로 옮길 예정입니다.
 - 국내 일일 갱신(날짜별 조회)은 수정주가가 아니라서, 액면분할 등이 있었던 종목은 `backfill` 을 다시 돌려야 합니다.
+- 미국 종목 목록에 워런트·유닛 등 약 1,200개가 섞여 있습니다. 1단계에서 걸러낼 예정입니다.
 - DART 분기 기간 종료일은 12월 결산을 가정합니다.
 - 토스증권 API 의 경로와 한도는 제3자 가이드 기준이라 공식 문서로 확인이 필요합니다.
 
