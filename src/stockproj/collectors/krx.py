@@ -11,6 +11,7 @@ pykrx 는 KRX 정보데이터시스템을 읽는 비공식 라이브러리라 �
 
 from __future__ import annotations
 
+import re
 from datetime import date
 
 import pandas as pd
@@ -72,8 +73,24 @@ def normalize_ohlcv_by_ticker(df: pd.DataFrame, day: date) -> pd.DataFrame:
     return out.reset_index(drop=True)
 
 
+# 우선주: 종목코드 끝자리가 0 이 아니거나(005935 삼성전자우 등) 이름이 '우', '1우', '2우B' 로 끝난다
+_PREFERRED_NAME = re.compile(r"\d?우[A-C]?$")
+# 혹시 섞여 들어오는 ETF·ETN (운용사 브랜드로 시작)
+_ETF_NAME = re.compile(
+    r"^(KODEX|TIGER|KBSTAR|RISE|ACE|ARIRANG|HANARO|SOL|KOSEF|PLUS|TIMEFOLIO|KIWOOM|1Q|WON)\b|ETN"
+)
+
+
+def is_common_stock(symbol: str, name: str) -> bool:
+    """추천 대상(보통주)이면 True. 우선주와 ETF·ETN 은 False."""
+    name = (name or "").strip()
+    if not symbol.endswith("0") or _PREFERRED_NAME.search(name):
+        return False
+    return not _ETF_NAME.search(name)
+
+
 def list_stocks(day: date) -> pd.DataFrame:
-    """KOSPI·KOSDAQ 전 종목 → stocks 표준 표."""
+    """KOSPI·KOSDAQ 보통주 → stocks 표준 표 (우선주, ETF·ETN 제외)."""
     _ensure_request_timeout()
     from pykrx import stock
 
@@ -89,7 +106,11 @@ def list_stocks(day: date) -> pd.DataFrame:
                     "external_id": None,
                 }
             )
-    return pd.DataFrame(rows)
+    df = pd.DataFrame(rows)
+    if df.empty:
+        return df
+    keep = [is_common_stock(s, n) for s, n in zip(df["symbol"], df["name"], strict=True)]
+    return df[keep].reset_index(drop=True)
 
 
 def history(symbol: str, start: date, end: date) -> pd.DataFrame:

@@ -79,3 +79,14 @@ def test_request_timeout_default(monkeypatch):
     requests.Session().request("GET", "http://x")
     requests.Session().request("GET", "http://x", timeout=5)
     assert seen == [krx.REQUEST_TIMEOUT, 5]
+
+
+def test_krx_preferred_and_etf_excluded():
+    from stockproj.collectors.krx import is_common_stock
+
+    assert is_common_stock("005930", "삼성전자")
+    assert not is_common_stock("005935", "삼성전자우")
+    assert not is_common_stock("00104K", "CJ4우(전환)")
+    assert not is_common_stock("001040", "CJ우")  # 코드 끝이 0 이어도 이름이 '우' 로 끝나면 우선주
+    assert not is_common_stock("069500", "KODEX 200")
+    assert is_common_stock("000880", "한화")

@@ -52,8 +52,9 @@ def update_listings(db: Database, settings: Settings, market: str, today: Today 
             log.warning("DART_API_KEY 가 없어 DART 고유번호를 연결하지 않았습니다 (국내 재무 수집 불가).")
     elif market == "US":
         from stockproj.collectors.edgar import EdgarClient
+        from stockproj.collectors.nasdaq import etf_symbols
 
-        stocks = EdgarClient(settings.sec_user_agent or "").tickers()
+        stocks = EdgarClient(settings.sec_user_agent or "").tickers(frozenset(etf_symbols()))
     else:
         raise ValueError(f"알 수 없는 시장: {market}")
     saved = db.upsert_stocks(stocks)

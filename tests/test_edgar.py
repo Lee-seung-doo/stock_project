@@ -141,3 +141,23 @@ def test_parse_company_facts_reads_dei_shares():
     assert df.loc[0, "item"] == "SharesOutstanding"
     assert df.loc[0, "fiscal_period"] == "I"
     assert df.loc[0, "value"] == 15000
+
+
+def test_etfs_and_fund_names_excluded():
+    assert not is_common_stock("AGQ", "ProShares Trust II", "NYSE Arca")
+    assert not is_common_stock("AAAU", "Goldman Sachs Physical Gold ETF", "NYSE Arca")
+    assert not is_common_stock("XYZ", "Plain Name Corp", "NYSE", etfs=frozenset({"XYZ"}))
+    assert is_common_stock("XYZ", "Plain Name Corp", "NYSE")
+
+
+def test_parse_nasdaq_directory():
+    from stockproj.collectors.nasdaq import parse_etf_symbols
+
+    text = (
+        "ACT Symbol|Security Name|Exchange|CQS Symbol|ETF|Round Lot Size|Test Issue|NASDAQ Symbol\n"
+        "AGQ|ProShares Ultra Silver|P|AGQ|Y|100|N|AGQ\n"
+        "BRK.B|Berkshire Hathaway Inc. Class B|N|BRK.B|N|100|N|BRK=B\n"
+        "SPY.X|Some ETF Class X|P|SPY.X|Y|100|N|SPY=X\n"
+        "File Creation Time: 1127202618:00|||||||\n"
+    )
+    assert parse_etf_symbols(text, "ACT Symbol") == {"AGQ", "SPY-X"}

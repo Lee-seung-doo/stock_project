@@ -43,13 +43,23 @@ ALLOWED_EXCHANGES = {"NYSE", "Nasdaq", "NYSE American", "NYSE Arca", "CBOE"}
 _NON_COMMON_NAME = re.compile(
     r"\b(warrants?|units?|rights?|preferred|depositary shares? representing)\b", re.I
 )
+# ETF·ETN·펀드로 보이는 이름 (거래소 ETF 목록을 못 받았을 때의 보조 규칙)
+_FUND_NAME = re.compile(
+    r"\b(ETF|ETN|ETP|Fund|Funds)\b|ProShares|iShares|SPDR|Invesco DB|Direxion|WisdomTree|VanEck|Grayscale",
+    re.I,
+)
 # 티커 접미사: BRK-B 처럼 클래스 주식은 남기고, -WT -WS -U -UN -R -RT -P* 는 뺀다
 _NON_COMMON_SUFFIX = re.compile(r"-(WT|WS|W|U|UN|R|RT|P[A-Z]?)$")
 
 
-def is_common_stock(symbol: str, name: str, exchange: str) -> bool:
-    """보통주로 보이면 True. Nasdaq 5글자 티커의 끝 W/U/R 은 워런트·유닛·권리 관례다."""
+def is_common_stock(symbol: str, name: str, exchange: str, etfs: frozenset[str] = frozenset()) -> bool:
+    """보통주로 보이면 True. Nasdaq 5글자 티커의 끝 W/U/R 은 워런트·유닛·권리 관례다.
+
+    etfs: 거래소 디렉터리에서 받은 ETF 티커. 여기에 있거나 이름이 ETF·펀드 같으면 제외한다.
+    """
     symbol = symbol.upper()
+    if symbol in etfs or _FUND_NAME.search(name or ""):
+        return False
     if _NON_COMMON_SUFFIX.search(symbol) or _NON_COMMON_NAME.search(name or ""):
         return False
     if exchange == "Nasdaq" and len(symbol) == 5 and symbol[-1] in "WUR":
@@ -61,13 +71,16 @@ class EdgarError(RuntimeError):
     pass
 
 
-def parse_tickers(body: dict) -> pd.DataFrame:
-    """company_tickers_exchange.json → stocks 표준 표 (주요 거래소만)."""
+def parse_tickers(body: dict, etfs: frozenset[str] = frozenset()) -> pd.DataFrame:
+    """company_tickers_exchange.json → stocks 표준 표 (주요 거래소 보통주만)."""
     fields = body["fields"]
     df = pd.DataFrame(body["data"], columns=fields)
     df = df[df["exchange"].isin(ALLOWED_EXCHANGES)]
     df = df[
-        [is_common_stock(t, n, e) for t, n, e in zip(df["ticker"], df["name"], df["exchange"], strict=True)]
+        [
+            is_common_stock(t, n, e, etfs)
+            for t, n, e in zip(df["ticker"], df["name"], df["exchange"], strict=True)
+        ]
     ]
     out = pd.DataFrame(
         {
@@ -138,9 +151,9 @@ class EdgarClient:
         self.session.headers["User-Agent"] = user_agent
         self.limiter = RateLimiter(per_second)
 
-    def tickers(self) -> pd.DataFrame:
+    def tickers(self, etfs: frozenset[str] = frozenset()) -> pd.DataFrame:
         self.limiter.wait()
-        return parse_tickers(request_with_retry(self.session, "GET", TICKERS_URL).json())
+        return parse_tickers(request_with_retry(self.session, "GET", TICKERS_URL).json(), etfs)
 
     def company_facts(self, cik: int | str, symbol: str) -> pd.DataFrame:
         self.limiter.wait()
