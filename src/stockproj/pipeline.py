@@ -37,8 +37,10 @@ def update_listings(db: Database, settings: Settings, market: str, today: Today 
 
         stocks = pd.DataFrame()
         for back in range(8):  # 주말·휴일이면 가장 가까운 영업일 목록을 쓴다
-            stocks = krx.list_stocks(today() - timedelta(days=back))
+            day = today() - timedelta(days=back)
+            stocks = krx.list_stocks(day)
             if not stocks.empty:
+                db.upsert_financials(krx.shares_outstanding(day))  # 시가총액 계산용 상장주식수
                 break
         if settings.dart_api_key and not stocks.empty:
             from stockproj.collectors.dart import DartClient
@@ -48,14 +50,19 @@ def update_listings(db: Database, settings: Settings, market: str, today: Today 
             stocks["external_id"] = stocks["symbol"].map(mapping)
         else:
             log.warning("DART_API_KEY 가 없어 DART 고유번호를 연결하지 않았습니다 (국내 재무 수집 불가).")
-        return db.upsert_stocks(stocks)
-
-    if market == "US":
+    elif market == "US":
         from stockproj.collectors.edgar import EdgarClient
+        from stockproj.collectors.nasdaq import etf_symbols
 
-        return db.upsert_stocks(EdgarClient(settings.sec_user_agent or "").tickers())
-
-    raise ValueError(f"알 수 없는 시장: {market}")
+        stocks = EdgarClient(settings.sec_user_agent or "").tickers(frozenset(etf_symbols()))
+    else:
+        raise ValueError(f"알 수 없는 시장: {market}")
+    saved = db.upsert_stocks(stocks)
+    if not stocks.empty:
+        removed = db.remove_unlisted(market, stocks["symbol"].tolist())
+        if removed:
+            log.info("%s 목록에서 빠진 종목 %d개를 지웠습니다.", market, removed)
+    return saved
 
 
 # ---- 시세 --------------------------------------------------------------------
@@ -107,6 +114,7 @@ def update_daily(db: Database, market: str, today: Today = date.today, max_days:
         for day in _weekdays(start, end):
             try:
                 saved += db.upsert_prices(krx.snapshot(day))
+                db.upsert_financials(krx.shares_outstanding(day))  # 시가총액 계산용
             except Exception as e:  # noqa: BLE001
                 log.warning("KR %s 일봉 실패: %s", day, e)
     elif market == "US":
@@ -167,3 +175,38 @@ def update_financials(
             if i % 200 == 0:
                 log.info("US 재무 %d/%d 종목", i, len(stocks))
     return saved
+
+
+# ---- 점수와 알림 --------------------------------------------------------------
+
+
+def compute_scores(db: Database, market: str, today: Today = date.today) -> int:
+    """마지막 시세 날짜(오늘 이전)를 기준일로 프리셋별 점수를 계산해 저장한다."""
+    from stockproj.analysis import scoring
+
+    last = db.last_price_date(market)
+    if last is None:
+        raise RuntimeError(f"{market} 시세가 없습니다. 먼저 backfill 또는 daily 를 실행하세요.")
+    as_of = min(last, today())
+    scores = scoring.compute(db, market, as_of)
+    saved = db.replace_scores(scores)
+    log.info(
+        "%s %s 기준 점수 %d건 (추천 이상 %d건)",
+        market,
+        as_of,
+        saved,
+        int(scores["grade"].isin(["강력 추천", "추천"]).sum()) if saved else 0,
+    )
+    return saved
+
+
+def send_kakao(db: Database, settings: Settings) -> int:
+    from stockproj.report.kakao import KakaoClient, notify
+
+    client = KakaoClient(
+        settings.kakao_rest_api_key or "",
+        settings.kakao_token_path,
+        redirect_uri=settings.kakao_redirect_uri,
+        client_secret=settings.kakao_client_secret,
+    )
+    return notify(client, db.latest_scores(), settings.dashboard_url)

@@ -18,6 +18,10 @@ backfill = [
     "pykrx>=1.0.45",
     "yfinance>=0.2.40",
 ]
+# 웹 대시보드
+web = [
+    "streamlit>=1.46",
+]
 dev = [
     "pytest>=8",
     "ruff>=0.6",

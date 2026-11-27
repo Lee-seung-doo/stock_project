@@ -20,6 +20,11 @@ class Settings:
     toss_base_url: str
     dart_api_key: str | None
     sec_user_agent: str | None
+    kakao_rest_api_key: str | None = None
+    kakao_client_secret: str | None = None
+    kakao_redirect_uri: str = "https://localhost"
+    kakao_token_path: Path = Path("data/kakao_token.json")
+    dashboard_url: str = "http://localhost:8501"
 
 
 def _get(name: str) -> str | None:
@@ -37,4 +42,9 @@ def load_settings(env_file: str | None = ".env") -> Settings:
         toss_base_url=_get("TOSS_BASE_URL") or "https://openapi.tossinvest.com",
         dart_api_key=_get("DART_API_KEY"),
         sec_user_agent=_get("SEC_USER_AGENT"),
+        kakao_rest_api_key=_get("KAKAO_REST_API_KEY"),
+        kakao_client_secret=_get("KAKAO_CLIENT_SECRET"),
+        kakao_redirect_uri=_get("KAKAO_REDIRECT_URI") or "https://localhost",
+        kakao_token_path=Path(_get("KAKAO_TOKEN_PATH") or "data/kakao_token.json"),
+        dashboard_url=_get("DASHBOARD_URL") or "http://localhost:8501",
     )
