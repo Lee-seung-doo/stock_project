@@ -1,0 +1,44 @@
+[project]
+name = "stockproj"
+version = "0.1.0"
+description = "국내·미국 주식 종목 분석 및 추천 시스템"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "duckdb>=1.1",
+    "pandas>=2.2",
+    "pyarrow>=16",
+    "requests>=2.32",
+    "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+# 과거 시세 대량 백필용 무료 라이브러리 (스크래핑 기반이라 선택 설치)
+backfill = [
+    "pykrx>=1.0.45",
+    "yfinance>=0.2.40",
+]
+dev = [
+    "pytest>=8",
+    "ruff>=0.6",
+]
+
+[project.scripts]
+stockproj = "stockproj.cli:main"
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]

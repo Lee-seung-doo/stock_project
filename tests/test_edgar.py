@@ -1,0 +1,106 @@
+from datetime import date
+
+from stockproj.collectors.edgar import parse_company_facts, parse_tickers
+
+
+def test_parse_tickers_filters_exchanges():
+    body = {
+        "fields": ["cik", "name", "ticker", "exchange"],
+        "data": [
+            [320193, "Apple Inc.", "AAPL", "Nasdaq"],
+            [1067983, "Berkshire Hathaway", "BRK-B", "NYSE"],
+            [1234, "Some OTC Co", "XXXX", "OTC"],
+        ],
+    }
+    df = parse_tickers(body)
+    assert list(df["symbol"]) == ["AAPL", "BRK-B"]
+    assert list(df["external_id"]) == ["320193", "1067983"]
+    assert set(df["market"]) == {"US"}
+
+
+def test_parse_company_facts_classifies_periods_and_keeps_first_filing():
+    body = {
+        "facts": {
+            "us-gaap": {
+                "Revenues": {
+                    "units": {
+                        "USD": [
+                            # 연간 값: 원래 10-K 와 다음 해 10-K 의 비교 기간 → 처음 공시만 남아야 함
+                            {
+                                "start": "2024-10-01",
+                                "end": "2025-09-30",
+                                "val": 100,
+                                "form": "10-K",
+                                "fy": 2025,
+                                "fp": "FY",
+                                "filed": "2025-11-01",
+                            },
+                            {
+                                "start": "2024-10-01",
+                                "end": "2025-09-30",
+                                "val": 101,
+                                "form": "10-K",
+                                "fy": 2026,
+                                "fp": "FY",
+                                "filed": "2026-11-01",
+                            },
+                            # 분기 값
+                            {
+                                "start": "2025-07-01",
+                                "end": "2025-09-30",
+                                "val": 30,
+                                "form": "10-K",
+                                "fy": 2025,
+                                "fp": "FY",
+                                "filed": "2025-11-01",
+                            },
+                            # 9개월 누적 → 버림
+                            {
+                                "start": "2025-01-01",
+                                "end": "2025-09-30",
+                                "val": 70,
+                                "form": "10-Q",
+                                "fy": 2025,
+                                "fp": "Q3",
+                                "filed": "2025-10-30",
+                            },
+                            # 10-K/10-Q 가 아닌 서식 → 버림
+                            {
+                                "start": "2024-10-01",
+                                "end": "2025-09-30",
+                                "val": 999,
+                                "form": "8-K",
+                                "fy": 2025,
+                                "fp": "FY",
+                                "filed": "2025-10-20",
+                            },
+                        ]
+                    }
+                },
+                "Assets": {
+                    "units": {
+                        "USD": [
+                            {
+                                "end": "2025-09-30",
+                                "val": 500,
+                                "form": "10-K",
+                                "fy": 2025,
+                                "fp": "FY",
+                                "filed": "2025-11-01",
+                            },
+                        ]
+                    }
+                },
+            }
+        }
+    }
+    df = parse_company_facts(body, "AAPL").set_index(["item", "fiscal_period"])
+    assert df.loc[("Revenues", "FY"), "value"] == 100
+    assert df.loc[("Revenues", "FY"), "filed"] == date(2025, 11, 1)
+    assert df.loc[("Revenues", "Q"), "value"] == 30
+    assert df.loc[("Assets", "I"), "value"] == 500
+    assert len(df) == 3
+
+
+def test_parse_company_facts_empty():
+    assert parse_company_facts({"facts": {}}, "X").empty
