@@ -85,3 +85,34 @@ def snapshot(day: date) -> pd.DataFrame:
     ]
     frames = [f for f in frames if not f.empty]
     return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+
+
+def normalize_market_cap(df: pd.DataFrame, day: date) -> pd.DataFrame:
+    """get_market_cap_by_ticker 결과(index=티커, 열=상장주식수 등) → financials 표준 표.
+
+    상장주식수를 재무 표에 시점 값(I)으로 넣어 두면, 미국(SEC 발행주식수)과 같은 방식으로 시가총액을 계산한다.
+    """
+    if df is None or df.empty or "상장주식수" not in df:
+        return pd.DataFrame()
+    out = pd.DataFrame(
+        {
+            "market": "KR",
+            "symbol": df.index.astype(str),
+            "period_end": day,
+            "fiscal_year": day.year,
+            "fiscal_period": "I",
+            "item": "SharesOutstanding",
+            "value": df["상장주식수"].astype(float).to_numpy(),
+            "unit": "shares",
+            "filed": day,
+            "source": "pykrx",
+        }
+    )
+    return out[out["value"] > 0].reset_index(drop=True)
+
+
+def shares_outstanding(day: date) -> pd.DataFrame:
+    """하루치 전 종목 상장주식수. 휴장일이면 빈 표."""
+    from pykrx import stock
+
+    return normalize_market_cap(stock.get_market_cap_by_ticker(_ymd(day), market="ALL"), day)

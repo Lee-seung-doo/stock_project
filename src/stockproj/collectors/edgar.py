@@ -5,6 +5,8 @@ SEC 는 User-Agent 에 앱 이름과 연락처를 요구한다(.env 의 SEC_USER
 
 from __future__ import annotations
 
+import re
+
 import pandas as pd
 import requests
 
@@ -32,7 +34,27 @@ CONCEPTS = [
     "CommonStockSharesOutstanding",
 ]
 
+# dei(문서 정보) 항목 → 저장할 이름. 시가총액 계산에 쓰는 발행주식수.
+DEI_CONCEPTS = {"EntityCommonStockSharesOutstanding": "SharesOutstanding"}
+
 ALLOWED_EXCHANGES = {"NYSE", "Nasdaq", "NYSE American", "NYSE Arca", "CBOE"}
+
+# 보통주가 아닌 증권(워런트, 유닛, 권리, 우선주) 이름 패턴
+_NON_COMMON_NAME = re.compile(
+    r"\b(warrants?|units?|rights?|preferred|depositary shares? representing)\b", re.I
+)
+# 티커 접미사: BRK-B 처럼 클래스 주식은 남기고, -WT -WS -U -UN -R -RT -P* 는 뺀다
+_NON_COMMON_SUFFIX = re.compile(r"-(WT|WS|W|U|UN|R|RT|P[A-Z]?)$")
+
+
+def is_common_stock(symbol: str, name: str, exchange: str) -> bool:
+    """보통주로 보이면 True. Nasdaq 5글자 티커의 끝 W/U/R 은 워런트·유닛·권리 관례다."""
+    symbol = symbol.upper()
+    if _NON_COMMON_SUFFIX.search(symbol) or _NON_COMMON_NAME.search(name or ""):
+        return False
+    if exchange == "Nasdaq" and len(symbol) == 5 and symbol[-1] in "WUR":
+        return False
+    return True
 
 
 class EdgarError(RuntimeError):
@@ -44,6 +66,9 @@ def parse_tickers(body: dict) -> pd.DataFrame:
     fields = body["fields"]
     df = pd.DataFrame(body["data"], columns=fields)
     df = df[df["exchange"].isin(ALLOWED_EXCHANGES)]
+    df = df[
+        [is_common_stock(t, n, e) for t, n, e in zip(df["ticker"], df["name"], df["exchange"], strict=True)]
+    ]
     out = pd.DataFrame(
         {
             "market": "US",
@@ -58,10 +83,12 @@ def parse_tickers(body: dict) -> pd.DataFrame:
 
 def parse_company_facts(body: dict, symbol: str, concepts: list[str] = CONCEPTS) -> pd.DataFrame:
     """companyfacts 응답 → financials 표준 표. 같은 기간이 여러 공시에 나오면 처음 공시된 값을 쓴다."""
-    gaap = body.get("facts", {}).get("us-gaap", {})
+    facts_by_ns = body.get("facts", {})
+    targets = [(facts_by_ns.get("us-gaap", {}), c, c) for c in concepts]
+    targets += [(facts_by_ns.get("dei", {}), c, name) for c, name in DEI_CONCEPTS.items()]
     rows = []
-    for concept in concepts:
-        units = gaap.get(concept, {}).get("units", {})
+    for ns, concept, item_name in targets:
+        units = ns.get(concept, {}).get("units", {})
         for unit, facts in units.items():
             for f in facts:
                 if f.get("form") not in ("10-K", "10-Q", "10-K/A", "10-Q/A"):
@@ -74,7 +101,7 @@ def parse_company_facts(body: dict, symbol: str, concepts: list[str] = CONCEPTS)
                         "period_start": f.get("start"),
                         "fiscal_year": f.get("fy"),
                         "fiscal_period": f.get("fp") or "",
-                        "item": concept,
+                        "item": item_name,
                         "value": f.get("val"),
                         "unit": unit,
                         "filed": f.get("filed"),

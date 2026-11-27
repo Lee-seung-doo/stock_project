@@ -66,3 +66,14 @@ def test_status_counts_per_market():
     status = db.status().set_index("market")
     assert status.loc["KR", "price_rows"] == 1
     assert status.loc["US", "price_rows"] == 0
+
+
+def test_remove_unlisted():
+    db = Database()
+    db.upsert_stocks(
+        pd.DataFrame(
+            [{"market": "US", "symbol": s, "name": s, "exchange": "NYSE", "external_id": "1"} for s in "ABC"]
+        )
+    )
+    assert db.remove_unlisted("US", ["A", "C"]) == 1
+    assert list(db.symbols("US")["symbol"]) == ["A", "C"]

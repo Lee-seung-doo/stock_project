@@ -2,7 +2,7 @@ from datetime import date
 
 import pandas as pd
 
-from stockproj.collectors.krx import normalize_ohlcv_by_date, normalize_ohlcv_by_ticker
+from stockproj.collectors.krx import normalize_market_cap, normalize_ohlcv_by_date, normalize_ohlcv_by_ticker
 from stockproj.collectors.us_prices import chunks, normalize_download, to_yahoo_symbol
 
 KR_COLS = ["시가", "고가", "저가", "종가", "거래량", "등락률"]
@@ -45,3 +45,19 @@ def test_normalize_multiindex_download():
     assert set(out["symbol"]) == {"AAPL", "BF.B"}
     assert len(out[out["symbol"] == "AAPL"]) == 1  # 종가 없는 날 제외
     assert len(out[out["symbol"] == "BF.B"]) == 2
+
+
+def test_krx_market_cap_to_shares():
+    df = pd.DataFrame(
+        {
+            "종가": [100, 0],
+            "시가총액": [1e9, 0],
+            "거래량": [1, 0],
+            "거래대금": [1, 0],
+            "상장주식수": [1e7, 0],
+        },
+        index=pd.Index(["005930", "999999"]),
+    )
+    out = normalize_market_cap(df, date(2026, 11, 26))
+    assert out.to_dict("records")[0]["item"] == "SharesOutstanding"
+    assert list(out["symbol"]) == ["005930"]

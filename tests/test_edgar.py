@@ -1,6 +1,6 @@
 from datetime import date
 
-from stockproj.collectors.edgar import parse_company_facts, parse_tickers
+from stockproj.collectors.edgar import is_common_stock, parse_company_facts, parse_tickers
 
 
 def test_parse_tickers_filters_exchanges():
@@ -104,3 +104,40 @@ def test_parse_company_facts_classifies_periods_and_keeps_first_filing():
 
 def test_parse_company_facts_empty():
     assert parse_company_facts({"facts": {}}, "X").empty
+
+
+def test_is_common_stock_filters_warrants_units_rights():
+    assert is_common_stock("AAPL", "Apple Inc.", "Nasdaq")
+    assert is_common_stock("BRK-B", "Berkshire Hathaway", "NYSE")
+    assert not is_common_stock("ABCDW", "Abc Acquisition Corp", "Nasdaq")
+    assert not is_common_stock("ABCDU", "Abc Acquisition Corp", "Nasdaq")
+    assert not is_common_stock("XYZ-WT", "Xyz Corp", "NYSE")
+    assert not is_common_stock("XYZ-PA", "Xyz Corp", "NYSE")
+    assert not is_common_stock("QQQQ", "Some SPAC Units", "NYSE")
+
+
+def test_parse_company_facts_reads_dei_shares():
+    body = {
+        "facts": {
+            "dei": {
+                "EntityCommonStockSharesOutstanding": {
+                    "units": {
+                        "shares": [
+                            {
+                                "end": "2025-10-15",
+                                "val": 15000,
+                                "form": "10-K",
+                                "fy": 2025,
+                                "fp": "FY",
+                                "filed": "2025-11-01",
+                            }
+                        ]
+                    }
+                }
+            }
+        }
+    }
+    df = parse_company_facts(body, "AAPL")
+    assert df.loc[0, "item"] == "SharesOutstanding"
+    assert df.loc[0, "fiscal_period"] == "I"
+    assert df.loc[0, "value"] == 15000
