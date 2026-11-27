@@ -1,0 +1,87 @@
+"""국내 종목 목록과 일봉 (pykrx, 무료).
+
+pykrx 는 KRX 정보데이터시스템을 읽는 비공식 라이브러리라 사이트가 바뀌면 깨질 수 있다.
+그래서 import 를 함수 안에서 하고, 결과를 표준 표로 바꾸는 부분(normalize_*)은 따로 둬서 테스트한다.
+
+- 과거 백필: 종목별 수정주가 일봉 (get_market_ohlcv_by_date, adjusted=True)
+- 매일 갱신: 날짜별 전 종목 일봉 (get_market_ohlcv_by_ticker) — 호출 1번에 전 종목
+  날짜별 조회는 수정주가가 아니어서, 액면분할 등이 생긴 종목은 백필을 다시 돌려야 한다.
+  1단계에서 토스증권 API(수정주가 캔들)로 바꿀 예정이다.
+"""
+
+from __future__ import annotations
+
+from datetime import date
+
+import pandas as pd
+
+MARKETS = ("KOSPI", "KOSDAQ")
+_KR_COLS = {"시가": "open", "고가": "high", "저가": "low", "종가": "close", "거래량": "volume"}
+
+
+def _ymd(d: date) -> str:
+    return d.strftime("%Y%m%d")
+
+
+def normalize_ohlcv_by_date(df: pd.DataFrame, symbol: str) -> pd.DataFrame:
+    """index=날짜, 열=시가/고가/저가/종가/거래량 → daily_prices 표준 표."""
+    if df is None or df.empty:
+        return pd.DataFrame()
+    out = df.rename(columns=_KR_COLS)[list(_KR_COLS.values())].copy()
+    out["date"] = pd.to_datetime(df.index).date
+    out["market"] = "KR"
+    out["symbol"] = symbol
+    out["source"] = "pykrx"
+    # 거래정지일은 시가·고가·저가가 0 으로 나온다
+    out = out[out["close"] > 0]
+    return out.reset_index(drop=True)
+
+
+def normalize_ohlcv_by_ticker(df: pd.DataFrame, day: date) -> pd.DataFrame:
+    """index=티커, 열=시가/고가/저가/종가/거래량 → daily_prices 표준 표 (하루치 전 종목)."""
+    if df is None or df.empty:
+        return pd.DataFrame()
+    out = df.rename(columns=_KR_COLS)[list(_KR_COLS.values())].copy()
+    out["symbol"] = df.index.astype(str)
+    out["date"] = day
+    out["market"] = "KR"
+    out["source"] = "pykrx"
+    out = out[out["close"] > 0]
+    return out.reset_index(drop=True)
+
+
+def list_stocks(day: date) -> pd.DataFrame:
+    """KOSPI·KOSDAQ 전 종목 → stocks 표준 표."""
+    from pykrx import stock
+
+    rows = []
+    for market in MARKETS:
+        for ticker in stock.get_market_ticker_list(_ymd(day), market=market):
+            rows.append(
+                {
+                    "market": "KR",
+                    "symbol": ticker,
+                    "name": stock.get_market_ticker_name(ticker),
+                    "exchange": market,
+                    "external_id": None,
+                }
+            )
+    return pd.DataFrame(rows)
+
+
+def history(symbol: str, start: date, end: date) -> pd.DataFrame:
+    from pykrx import stock
+
+    df = stock.get_market_ohlcv_by_date(_ymd(start), _ymd(end), symbol, adjusted=True)
+    return normalize_ohlcv_by_date(df, symbol)
+
+
+def snapshot(day: date) -> pd.DataFrame:
+    """하루치 전 종목 일봉. 휴장일이면 빈 표."""
+    from pykrx import stock
+
+    frames = [
+        normalize_ohlcv_by_ticker(stock.get_market_ohlcv_by_ticker(_ymd(day), market=m), day) for m in MARKETS
+    ]
+    frames = [f for f in frames if not f.empty]
+    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
