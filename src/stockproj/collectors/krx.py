@@ -18,6 +18,28 @@ import pandas as pd
 MARKETS = ("KOSPI", "KOSDAQ")
 _KR_COLS = {"시가": "open", "고가": "high", "저가": "low", "종가": "close", "거래량": "volume"}
 
+REQUEST_TIMEOUT = 30  # 초. pykrx 는 요청에 timeout 을 주지 않아 응답이 없으면 무한정 멈춘다.
+
+
+def _ensure_request_timeout() -> None:
+    """requests.Session.request 를 한 번만 감싸 timeout 이 없는 요청에 기본값을 넣는다.
+
+    pykrx 내부 요청을 고칠 방법이 없어서 쓰는 방법이다. 다른 코드가 timeout 을 직접 주면 그 값을 그대로 쓴다.
+    """
+    import requests
+
+    original = requests.Session.request
+    if getattr(original, "_stockproj_timeout", False):
+        return
+
+    def request(self, method, url, **kwargs):
+        if kwargs.get("timeout") is None:
+            kwargs["timeout"] = REQUEST_TIMEOUT
+        return original(self, method, url, **kwargs)
+
+    request._stockproj_timeout = True
+    requests.Session.request = request
+
 
 def _ymd(d: date) -> str:
     return d.strftime("%Y%m%d")
@@ -52,6 +74,7 @@ def normalize_ohlcv_by_ticker(df: pd.DataFrame, day: date) -> pd.DataFrame:
 
 def list_stocks(day: date) -> pd.DataFrame:
     """KOSPI·KOSDAQ 전 종목 → stocks 표준 표."""
+    _ensure_request_timeout()
     from pykrx import stock
 
     rows = []
@@ -70,6 +93,7 @@ def list_stocks(day: date) -> pd.DataFrame:
 
 
 def history(symbol: str, start: date, end: date) -> pd.DataFrame:
+    _ensure_request_timeout()
     from pykrx import stock
 
     df = stock.get_market_ohlcv_by_date(_ymd(start), _ymd(end), symbol, adjusted=True)
@@ -78,6 +102,7 @@ def history(symbol: str, start: date, end: date) -> pd.DataFrame:
 
 def snapshot(day: date) -> pd.DataFrame:
     """하루치 전 종목 일봉. 휴장일이면 빈 표."""
+    _ensure_request_timeout()
     from pykrx import stock
 
     frames = [
@@ -113,6 +138,7 @@ def normalize_market_cap(df: pd.DataFrame, day: date) -> pd.DataFrame:
 
 def shares_outstanding(day: date) -> pd.DataFrame:
     """하루치 전 종목 상장주식수. 휴장일이면 빈 표."""
+    _ensure_request_timeout()
     from pykrx import stock
 
     return normalize_market_cap(stock.get_market_cap_by_ticker(_ymd(day), market="ALL"), day)

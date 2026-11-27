@@ -5,6 +5,7 @@ import pandas as pd
 import pytest
 
 from stockproj.analysis import fundamental, scoring, technical
+from stockproj.analysis.common import pct_rank
 from stockproj.storage import Database
 
 AS_OF = date(2026, 11, 26)
@@ -152,3 +153,9 @@ def test_compute_scores_end_to_end(db):
     db.replace_scores(scores)
     db.replace_scores(scores)  # 다시 넣어도 중복 없음
     assert len(db.latest_scores("US")) == len(scores)
+
+
+def test_pct_rank_handles_infinity():
+    ranked = pct_rank(pd.Series([1, float("inf"), 3, float("-inf"), None], dtype=object))
+    assert list(ranked.isna()) == [False, True, False, True, True]
+    assert ranked.iloc[2] == 100

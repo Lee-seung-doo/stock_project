@@ -7,7 +7,8 @@ import pandas as pd
 
 def pct_rank(series: pd.Series, higher_is_better: bool = True) -> pd.Series:
     """시장 안 백분위 점수(0~100). 값이 없으면 NaN 으로 남긴다."""
-    s = series.astype(float).replace([float("inf"), float("-inf")], pd.NA).astype(float)
+    # inf 를 pd.NA 로 바꾸면 object 열이 되어 계산이 깨지므로 float NaN 으로 바꾼다
+    s = series.astype(float).replace([float("inf"), float("-inf")], float("nan"))
     ranked = s.rank(pct=True, ascending=higher_is_better) * 100
     return ranked
 

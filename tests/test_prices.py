@@ -61,3 +61,21 @@ def test_krx_market_cap_to_shares():
     out = normalize_market_cap(df, date(2026, 11, 26))
     assert out.to_dict("records")[0]["item"] == "SharesOutstanding"
     assert list(out["symbol"]) == ["005930"]
+
+
+def test_request_timeout_default(monkeypatch):
+    import requests
+
+    from stockproj.collectors import krx
+
+    seen = []
+
+    def fake(self, method, url, **kwargs):
+        seen.append(kwargs.get("timeout"))
+
+    monkeypatch.setattr(requests.Session, "request", fake)
+    krx._ensure_request_timeout()
+    krx._ensure_request_timeout()  # 두 번 불러도 한 번만 감싼다
+    requests.Session().request("GET", "http://x")
+    requests.Session().request("GET", "http://x", timeout=5)
+    assert seen == [krx.REQUEST_TIMEOUT, 5]

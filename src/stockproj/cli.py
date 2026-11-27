@@ -99,7 +99,10 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "web":
         app = Path(__file__).parent / "report" / "web.py"
-        return subprocess.call([sys.executable, "-m", "streamlit", "run", str(app)])
+        # headless: 첫 실행 때 이메일을 묻는 질문을 건너뛴다
+        return subprocess.call(
+            [sys.executable, "-m", "streamlit", "run", str(app), "--server.headless", "true"]
+        )
     if args.command == "kakao-login":
         _kakao_login(settings)
         return 0
