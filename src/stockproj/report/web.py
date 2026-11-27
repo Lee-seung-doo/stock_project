@@ -50,7 +50,11 @@ def main() -> None:
     as_of = pd.to_datetime(view["as_of"]).max() if not view.empty else None
     st.caption(f"기준일 {as_of:%Y-%m-%d} · {len(view)}종목" if as_of is not None else "해당 종목 없음")
 
-    table = view[["rank", "symbol", "name", "score", "grade", "fundamental", "technical", "close", "reasons"]]
+    table = view[
+        ["rank", "symbol", "name", "score", "grade", "fundamental", "technical", "close", "reasons"]
+    ].copy()
+    # 근거는 강점과 약점을 줄을 나눠 보여준다
+    table["reasons"] = table["reasons"].fillna("").str.replace(" / ", "  \n", regex=False)
     table = table.rename(
         columns={
             "rank": "순위",
@@ -74,7 +78,8 @@ def main() -> None:
         },
         na_rep="-",
     )
-    st.dataframe(styled, hide_index=True, width="stretch", height=480)
+    # st.dataframe 은 칸 안에서 줄바꿈이 안 돼서, 긴 근거가 여러 줄로 보이도록 st.table 을 쓴다
+    st.table(styled, hide_index=True, height=480)
 
     if view.empty:
         return
@@ -91,8 +96,10 @@ def main() -> None:
     row = view.set_index("symbol").loc[symbol]
     st.write(
         f"**{row['grade']}** · 점수 {row['score']:.1f} · 종가 {fmt.price(row['close'], market)}"
-        f"{fmt.CURRENCY[market]} · {row['reasons'] or '근거 없음'}"
+        f"{fmt.CURRENCY[market]}"
     )
+    # 강점과 약점을 한 줄씩 (마크다운 줄바꿈은 줄 끝 공백 두 칸)
+    st.write("  \n".join((row["reasons"] or "근거 없음").split(" / ")))
     st.caption("투자 참고용 정보이며, 투자 판단과 책임은 본인에게 있습니다.")
 
 
